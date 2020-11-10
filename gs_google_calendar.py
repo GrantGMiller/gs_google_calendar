@@ -12,10 +12,13 @@ class GoogleCalendar(_BaseCalendar):
         self._getAccessTokenCallback = getAccessTokenCallback
         self._calendarName = calendarName
         self._calendarID = None
+        self.calendars = set()  # set to avoid duplicates
         self._baseURL = 'https://www.googleapis.com/calendar/v3/'
         self._debug = debug
 
         super().__init__(*a, **k)
+
+        self._getCalendarID()  # init the self.calendars attribute
 
     def print(self, *a, **k):
         if self._debug:
@@ -34,9 +37,14 @@ class GoogleCalendar(_BaseCalendar):
             )
             self.print('29 url=', url)
             resp = gs_requests.get(url)
+            self._NewConnectionStatus('Connected' if resp.ok else 'Disconnected')
             self.print('_getCalendarID resp=', json.dumps(resp.json(), indent=2))
             for calendar in resp.json().get('items', []):
-                if calendar.get('summary', None) == self._calendarName:
+                calendarName = calendar.get('summary', None)
+
+                self.calendars.add(calendarName)
+
+                if calendarName == self._calendarName:
                     self._calendarID = calendar.get('id')
                     self.print('New calendar ID found "{}"'.format(self._calendarID))
                     break
