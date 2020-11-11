@@ -2,6 +2,7 @@ import json
 import datetime
 from gs_calendar_base import _BaseCalendar, _CalendarItem
 import gs_requests
+import time
 
 
 class GoogleCalendar(_BaseCalendar):
@@ -32,11 +33,16 @@ class GoogleCalendar(_BaseCalendar):
 
     def _getCalendarID(self):
         if self._calendarID is None:
-            url = self._baseURL + 'users/me/calendarList?access_token={0}'.format(
+            url = self._baseURL + 'users/me/calendarList'.format(
                 self._getAccessTokenCallback(),
             )
             self.print('29 url=', url)
-            resp = gs_requests.get(url)
+            resp = gs_requests.get(
+                url,
+                headers={
+                    'Authorization': 'Bearer {}'.format(self._getAccessTokenCallback())
+                }
+            )
             self._NewConnectionStatus('Connected' if resp.ok else 'Disconnected')
             self.print('_getCalendarID resp=', json.dumps(resp.json(), indent=2))
             for calendar in resp.json().get('items', []):
@@ -67,6 +73,7 @@ class GoogleCalendar(_BaseCalendar):
 
         startStr = startDT.replace(microsecond=0).isoformat() + "-0000"
         endStr = endDT.replace(microsecond=0).isoformat() + "-0000"
+        print('endStr=', endStr)
         url = self._baseURL + 'calendars/{}/events?access_token={}&timeMax={}&timeMin={}&singleEvents=True'.format(
             self._getCalendarID(),
             self._getAccessTokenCallback(),
@@ -108,6 +115,61 @@ class GoogleCalendar(_BaseCalendar):
             endDT=endDT,
 
         )
+
+    def CreateCalendarEvent(self, subject, body, startDT, endDT):
+        timezone = time.tzname[-1] if len(time.tzname) > 1 else time.tzname[0]
+        print('timezone=', timezone)
+
+        data = {
+            "kind": "calendar#event",
+            "summary": subject,  # meeting subject
+            "description": body,  # meeting body
+            "start": {
+                "dateTime": startDT.astimezone(datetime.timezone.utc).isoformat(),
+            },
+            "end": {
+                "dateTime": endDT.astimezone(datetime.timezone.utc).isoformat(),
+            },
+        }
+        print('data=', data)
+
+        resp = gs_requests.post(
+            url='https://www.googleapis.com/calendar/v3/calendars/{calendarID}/events'.format(
+                calendarID=self._calendarID,
+            ),
+            headers={
+                'Authorization': 'Bearer {}'.format(self._getAccessTokenCallback())
+            },
+            json=data,
+        )
+        print('resp=', resp.text)
+
+        if resp.ok:
+            # save the calendar item into memory
+            item = resp.json()
+            start = fromisoformat(item['start']['dateTime'])
+            # start is offset-aware
+
+            end = fromisoformat(item['end']['dateTime'])
+
+            event = _CalendarItem(
+                startDT=datetime.datetime.fromtimestamp(start.timestamp()),
+                endDT=datetime.datetime.fromtimestamp(end.timestamp()),
+                data={
+                    'ItemId': item.get('id'),
+                    'Subject': item.get('summary'),
+                    'OrganizerName': item['creator']['email'],
+                    'HasAttachment': False,
+                },
+                parentCalendar=self,
+            )
+
+            self.RegisterCalendarItems(
+                calItems=[event],
+                startDT=start,
+                endDT=end,
+
+            )
 
 
 def fromisoformat(date_string):
@@ -265,6 +327,14 @@ if __name__ == '__main__':
     google.NewCalendarItem = lambda _, event: print('NewCalendarItem', event)
     google.CalendarItemChanged = lambda _, event: print('CalendarItemChanged', event)
     google.CalendarItemDeleted = lambda _, event: print('CalendarItemDeleted', event)
+
+    google.CreateCalendarEvent(
+        subject='Test at {}'.format(time.asctime()),
+        body='Test Body',
+        startDT=datetime.datetime.now(),
+        endDT=datetime.datetime.now() + datetime.timedelta(minutes=1),
+
+    )
 
     while True:
         google.UpdateCalendar(
