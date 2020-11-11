@@ -20,16 +20,26 @@ class GoogleCalendar(_BaseCalendar):
         super().__init__(*a, **k)
 
         self._getCalendarID()  # init the self.calendars attribute
+        self.session = gs_requests.session()
 
     def print(self, *a, **k):
         if self._debug:
             print(*a, **k)
 
     def _DoRequest(self, *a, **k):
+        print('_DoRequest(', a, k)
         if self._getCalendarID() is None:
-            raise PermissionError('No calendar ID')
+            raise PermissionError('Error resolving calendar ID')
 
-        return gs_requests.request(*a, **k)
+        self.session.headers['Authorization'] = 'Bearer {}'.format(self._getAccessTokenCallback())
+        self.session.headers['Accept'] = 'application/json'
+        for key, val in self.session.headers.items():
+            if 'Auth' in key:
+                val = val[:15] + '...'
+
+            print('header', key, '=', val)
+
+        return self.session.request(*a, **k)
 
     def _getCalendarID(self):
         if self._calendarID is None:
@@ -92,7 +102,7 @@ class GoogleCalendar(_BaseCalendar):
             self.print('item=', json.dumps(item, indent=2, sort_keys=True))
 
             start = fromisoformat(item['start']['dateTime'])
-            # start is offset-aware
+            print('95 start=', start)
 
             end = fromisoformat(item['end']['dateTime'])
 
@@ -133,13 +143,66 @@ class GoogleCalendar(_BaseCalendar):
         }
         print('data=', data)
 
-        resp = gs_requests.post(
+        resp = self._DoRequest(
+            method='POST',
             url='https://www.googleapis.com/calendar/v3/calendars/{calendarID}/events'.format(
                 calendarID=self._calendarID,
             ),
-            headers={
-                'Authorization': 'Bearer {}'.format(self._getAccessTokenCallback())
-            },
+            json=data,
+        )
+        print('resp=', resp.text)
+
+        if resp.ok:
+            # save the calendar item into memory
+            item = resp.json()
+            start = fromisoformat(item['start']['dateTime'])
+            # start is offset-aware
+
+            end = fromisoformat(item['end']['dateTime'])
+
+            event = _CalendarItem(
+                startDT=datetime.datetime.fromtimestamp(start.timestamp()),
+                endDT=datetime.datetime.fromtimestamp(end.timestamp()),
+                data={
+                    'ItemId': item.get('id'),
+                    'Subject': item.get('summary'),
+                    'OrganizerName': item['creator']['email'],
+                    'HasAttachment': False,
+                },
+                parentCalendar=self,
+            )
+
+            self.RegisterCalendarItems(
+                calItems=[event],
+                startDT=start,
+                endDT=end,
+
+            )
+
+    def ChangeEventTime(self, calItem, newStartDT=None, newEndDT=None):
+        print('ChangeEventTime(', calItem, 'newStartDT=', newStartDT, ', newEndDT=', newEndDT)
+        # url = 'http://192.168.68.105'
+        url = 'https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events/{eventId}'.format(
+            calendarId=self._calendarID,
+            eventId=calItem.Get('ItemId')
+        )
+
+        data = {
+        }
+
+        if newStartDT:
+            data['start'] = {
+                "dateTime": newStartDT.astimezone(datetime.timezone.utc).isoformat(),
+            }
+
+        if newEndDT:
+            data['end'] = {
+                "dateTime": newEndDT.astimezone(datetime.timezone.utc).isoformat(),
+            }
+
+        resp = self._DoRequest(
+            method='PATCH',
+            url=url,
             json=data,
         )
         print('resp=', resp.text)
@@ -172,7 +235,7 @@ class GoogleCalendar(_BaseCalendar):
             )
 
 
-def fromisoformat(date_string):
+def fromisoformat(date_string, returnOffsetAware=False):
     # apparently GS python 3.5 does not support this method.
     # Copied these from python 3.8 datetime source code
 
@@ -197,7 +260,10 @@ def fromisoformat(date_string):
     else:
         time_components = [0, 0, 0, 0, None]
 
-    return datetime.datetime(*(date_components + time_components))
+    ret = datetime.datetime(*(date_components + time_components))
+    if returnOffsetAware is False:
+        ret = datetime.datetime.fromtimestamp(ret.timestamp())
+    return ret
 
 
 def _parse_isoformat_time(tstr):
@@ -328,17 +394,32 @@ if __name__ == '__main__':
     google.CalendarItemChanged = lambda _, event: print('CalendarItemChanged', event)
     google.CalendarItemDeleted = lambda _, event: print('CalendarItemDeleted', event)
 
-    google.CreateCalendarEvent(
-        subject='Test at {}'.format(time.asctime()),
-        body='Test Body',
-        startDT=datetime.datetime.now(),
-        endDT=datetime.datetime.now() + datetime.timedelta(minutes=1),
+    # google.CreateCalendarEvent(
+    #     subject='Test at {}'.format(time.asctime()),
+    #     body='Test Body',
+    #     startDT=datetime.datetime.now(),
+    #     endDT=datetime.datetime.now() + datetime.timedelta(minutes=15),
+    #
+    # )
 
+    # while True:
+    #     google.UpdateCalendar(
+    #         startDT=datetime.datetime.utcnow(),
+    #         endDT=datetime.datetime.utcnow() + datetime.timedelta(days=7),
+    #     )
+    #     time.sleep(10)
+
+    google.UpdateCalendar(
+        startDT=datetime.datetime.now().replace(hour=0, minute=0, microsecond=0),
+        endDT=datetime.datetime.now() + datetime.timedelta(days=1),
     )
 
-    while True:
-        google.UpdateCalendar(
-            startDT=datetime.datetime.utcnow(),
-            endDT=datetime.datetime.utcnow() + datetime.timedelta(days=7),
+    nowEvents = google.GetNowCalItems()
+    print('nowEvents=', nowEvents)
+
+    for event in nowEvents:
+        google.ChangeEventTime(
+            event,
+            newStartDT=event.Get('Start') - datetime.timedelta(minutes=15),
+            newEndDT=event.Get('End') + datetime.timedelta(minutes=15),
         )
-        time.sleep(10)
