@@ -78,15 +78,16 @@ class GoogleCalendar(_BaseCalendar):
         '''
         self.print('UpdateCalendar(', calendar, startDT, endDT)
 
-        startDT = startDT or datetime.datetime.utcnow()
+        startDT = startDT or datetime.datetime.utcnow() - datetime.timedelta(days=1)
         endDT = endDT or datetime.datetime.utcnow() + datetime.timedelta(days=7)
 
-        startStr = startDT.replace(microsecond=0).isoformat() + "-0000"
-        endStr = endDT.replace(microsecond=0).isoformat() + "-0000"
+        startStr = datetime.datetime.utcfromtimestamp(startDT.timestamp()).isoformat() + "-0000"
+        endStr = datetime.datetime.utcfromtimestamp(endDT.timestamp()).isoformat() + "-0000"
+        print('startStr=', startStr)
         print('endStr=', endStr)
-        url = self._baseURL + 'calendars/{}/events?access_token={}&timeMax={}&timeMin={}&singleEvents=True'.format(
+
+        url = self._baseURL + 'calendars/{}/events?timeMax={}&timeMin={}&singleEvents=True'.format(
             self._getCalendarID(),
-            self._getAccessTokenCallback(),
             endStr,
             startStr
         )
@@ -135,10 +136,12 @@ class GoogleCalendar(_BaseCalendar):
             "summary": subject,  # meeting subject
             "description": body,  # meeting body
             "start": {
-                "dateTime": startDT.astimezone(datetime.timezone.utc).isoformat(),
+                # "dateTime": startDT.astimezone(datetime.timezone.utc).isoformat(),# doesnt work on python 3.5
+                "dateTime": datetime.datetime.utcfromtimestamp(startDT.timestamp()).isoformat() + '+00:00',
             },
             "end": {
-                "dateTime": endDT.astimezone(datetime.timezone.utc).isoformat(),
+                # "dateTime": endDT.astimezone(datetime.timezone.utc).isoformat(),# doesnt work on python 3.5
+                "dateTime": datetime.datetime.utcfromtimestamp(endDT.timestamp()).isoformat() + '+00:00',
             },
         }
         print('data=', data)
@@ -192,12 +195,14 @@ class GoogleCalendar(_BaseCalendar):
 
         if newStartDT:
             data['start'] = {
-                "dateTime": newStartDT.astimezone(datetime.timezone.utc).isoformat(),
+                # "dateTime": newStartDT.astimezone(datetime.timezone.utc).isoformat(),# doesnt work on python 3.5
+                "dateTime": datetime.datetime.utcfromtimestamp(newStartDT.timestamp()).isoformat() + '+00:00',
             }
 
         if newEndDT:
             data['end'] = {
-                "dateTime": newEndDT.astimezone(datetime.timezone.utc).isoformat(),
+                # "dateTime": newEndDT.astimezone(datetime.timezone.utc).isoformat(),# doesnt work on python 3.5
+                "dateTime": datetime.datetime.utcfromtimestamp(newEndDT.timestamp()).isoformat() + '+00:00',
             }
 
         resp = self._DoRequest(
@@ -394,13 +399,13 @@ if __name__ == '__main__':
     google.CalendarItemChanged = lambda _, event: print('CalendarItemChanged', event)
     google.CalendarItemDeleted = lambda _, event: print('CalendarItemDeleted', event)
 
-    # google.CreateCalendarEvent(
-    #     subject='Test at {}'.format(time.asctime()),
-    #     body='Test Body',
-    #     startDT=datetime.datetime.now(),
-    #     endDT=datetime.datetime.now() + datetime.timedelta(minutes=15),
-    #
-    # )
+    google.CreateCalendarEvent(
+        subject='Test at {}'.format(time.asctime()),
+        body='Test Body',
+        startDT=datetime.datetime.now(),
+        endDT=datetime.datetime.now() + datetime.timedelta(minutes=15),
+
+    )
 
     # while True:
     #     google.UpdateCalendar(
@@ -417,9 +422,9 @@ if __name__ == '__main__':
     nowEvents = google.GetNowCalItems()
     print('nowEvents=', nowEvents)
 
-    for event in nowEvents:
-        google.ChangeEventTime(
-            event,
-            newStartDT=event.Get('Start') - datetime.timedelta(minutes=15),
-            newEndDT=event.Get('End') + datetime.timedelta(minutes=15),
-        )
+    # for event in nowEvents:
+    #     google.ChangeEventTime(
+    #         event,
+    #         newStartDT=event.Get('Start') - datetime.timedelta(minutes=15),
+    #         newEndDT=event.Get('End') + datetime.timedelta(minutes=15),
+    #     )
