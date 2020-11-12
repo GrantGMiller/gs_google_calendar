@@ -27,7 +27,7 @@ class GoogleCalendar(_BaseCalendar):
             print(*a, **k)
 
     def _DoRequest(self, *a, **k):
-        print('_DoRequest(', a, k)
+        self.print('_DoRequest(', a, k)
         if self._getCalendarID() is None:
             raise PermissionError('Error resolving calendar ID')
 
@@ -37,7 +37,7 @@ class GoogleCalendar(_BaseCalendar):
             if 'Auth' in key:
                 val = val[:15] + '...'
 
-            print('header', key, '=', val)
+            self.print('header', key, '=', val)
 
         return self.session.request(*a, **k)
 
@@ -83,8 +83,8 @@ class GoogleCalendar(_BaseCalendar):
 
         startStr = datetime.datetime.utcfromtimestamp(startDT.timestamp()).isoformat() + "-0000"
         endStr = datetime.datetime.utcfromtimestamp(endDT.timestamp()).isoformat() + "-0000"
-        print('startStr=', startStr)
-        print('endStr=', endStr)
+        self.print('startStr=', startStr)
+        self.print('endStr=', endStr)
 
         url = self._baseURL + 'calendars/{}/events?timeMax={}&timeMin={}&singleEvents=True'.format(
             self._getCalendarID(),
@@ -103,7 +103,7 @@ class GoogleCalendar(_BaseCalendar):
             self.print('item=', json.dumps(item, indent=2, sort_keys=True))
 
             start = fromisoformat(item['start']['dateTime'])
-            print('95 start=', start)
+            self.print('95 start=', start)
 
             end = fromisoformat(item['end']['dateTime'])
 
@@ -129,7 +129,7 @@ class GoogleCalendar(_BaseCalendar):
 
     def CreateCalendarEvent(self, subject, body, startDT, endDT):
         timezone = time.tzname[-1] if len(time.tzname) > 1 else time.tzname[0]
-        print('timezone=', timezone)
+        self.print('timezone=', timezone)
 
         data = {
             "kind": "calendar#event",
@@ -144,7 +144,7 @@ class GoogleCalendar(_BaseCalendar):
                 "dateTime": datetime.datetime.utcfromtimestamp(endDT.timestamp()).isoformat() + '+00:00',
             },
         }
-        print('data=', data)
+        self.print('data=', data)
 
         resp = self._DoRequest(
             method='POST',
@@ -153,7 +153,7 @@ class GoogleCalendar(_BaseCalendar):
             ),
             json=data,
         )
-        print('resp=', resp.text)
+        self.print('resp=', resp.text)
 
         if resp.ok:
             # save the calendar item into memory
@@ -183,7 +183,7 @@ class GoogleCalendar(_BaseCalendar):
             )
 
     def ChangeEventTime(self, calItem, newStartDT=None, newEndDT=None):
-        print('ChangeEventTime(', calItem, 'newStartDT=', newStartDT, ', newEndDT=', newEndDT)
+        self.print('ChangeEventTime(', calItem, 'newStartDT=', newStartDT, ', newEndDT=', newEndDT)
         # url = 'http://192.168.68.105'
         url = 'https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events/{eventId}'.format(
             calendarId=self._calendarID,
@@ -210,7 +210,7 @@ class GoogleCalendar(_BaseCalendar):
             url=url,
             json=data,
         )
-        print('resp=', resp.text)
+        self.print('resp=', resp.text)
 
         if resp.ok:
             # save the calendar item into memory
