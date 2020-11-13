@@ -81,8 +81,8 @@ class GoogleCalendar(_BaseCalendar):
         '''
         self.print('UpdateCalendar(', calendar, startDT, endDT)
 
-        startDT = startDT or datetime.datetime.utcnow() - datetime.timedelta(days=1)
-        endDT = endDT or datetime.datetime.utcnow() + datetime.timedelta(days=7)
+        startDT = startDT or datetime.datetime.now() - datetime.timedelta(days=1)
+        endDT = endDT or datetime.datetime.now() + datetime.timedelta(days=7)
 
         startStr = datetime.datetime.utcfromtimestamp(startDT.timestamp()).isoformat() + "-0000"
         endStr = datetime.datetime.utcfromtimestamp(endDT.timestamp()).isoformat() + "-0000"
@@ -412,8 +412,8 @@ if __name__ == '__main__':
 
     # while True:
     #     google.UpdateCalendar(
-    #         startDT=datetime.datetime.utcnow(),
-    #         endDT=datetime.datetime.utcnow() + datetime.timedelta(days=7),
+    #         startDT=datetime.datetime.now(),
+    #         endDT=datetime.datetime.now() + datetime.timedelta(days=7),
     #     )
     #     time.sleep(10)
 
