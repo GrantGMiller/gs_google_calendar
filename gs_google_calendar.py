@@ -17,7 +17,10 @@ class GoogleCalendar(_BaseCalendar):
         self._baseURL = 'https://www.googleapis.com/calendar/v3/'
         self._debug = debug
 
-        super().__init__(*a, **k)
+        super().__init__(
+            *a,
+            # debug=debug,
+            **k)
 
         self._getCalendarID()  # init the self.calendars attribute
         self.session = gs_requests.session()
@@ -393,19 +396,19 @@ if __name__ == '__main__':
         calendarName='Room Agent Test',
         getAccessTokenCallback=user.GetAcessToken,
         debug=True,
+        persistentStorage='test.json',
     )
 
     google.NewCalendarItem = lambda _, event: print('NewCalendarItem', event)
     google.CalendarItemChanged = lambda _, event: print('CalendarItemChanged', event)
     google.CalendarItemDeleted = lambda _, event: print('CalendarItemDeleted', event)
 
-    google.CreateCalendarEvent(
-        subject='Test at {}'.format(time.asctime()),
-        body='Test Body',
-        startDT=datetime.datetime.now(),
-        endDT=datetime.datetime.now() + datetime.timedelta(minutes=15),
-
-    )
+    # google.CreateCalendarEvent(
+    #     subject='Test at {}'.format(time.asctime()),
+    #     body='Test Body',
+    #     startDT=datetime.datetime.now(),
+    #     endDT=datetime.datetime.now() + datetime.timedelta(minutes=15),
+    # )
 
     # while True:
     #     google.UpdateCalendar(
@@ -414,14 +417,15 @@ if __name__ == '__main__':
     #     )
     #     time.sleep(10)
 
+    time.sleep(2)
     google.UpdateCalendar(
-        startDT=datetime.datetime.now().replace(hour=0, minute=0, microsecond=0),
-        endDT=datetime.datetime.now() + datetime.timedelta(days=1),
+        # startDT=datetime.datetime.now().replace(hour=0, minute=0, microsecond=0),
+        # endDT=datetime.datetime.now() + datetime.timedelta(days=1),
     )
 
-    nowEvents = google.GetNowCalItems()
-    print('nowEvents=', nowEvents)
-
+    # nowEvents = google.GetNowCalItems()
+    # print('nowEvents=', nowEvents)
+    # print('all Events=', google.GetAllEvents())
     # for event in nowEvents:
     #     google.ChangeEventTime(
     #         event,
