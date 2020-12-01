@@ -110,6 +110,8 @@ class GoogleCalendar(_BaseCalendar):
 
             end = fromisoformat(item['end']['dateTime'])
 
+            hasAttachments = 'attachments' in item.keys()
+
             event = _CalendarItem(
                 startDT=datetime.datetime.fromtimestamp(start.timestamp()),
                 endDT=datetime.datetime.fromtimestamp(end.timestamp()),
@@ -117,7 +119,8 @@ class GoogleCalendar(_BaseCalendar):
                     'ItemId': item.get('id'),
                     'Subject': item.get('summary'),
                     'OrganizerName': item['creator']['email'],
-                    'HasAttachment': False,
+                    'HasAttachments': hasAttachments,
+                    'attachments': item.get('attachments', [])
                 },
                 parentCalendar=self,
             )
@@ -241,6 +244,55 @@ class GoogleCalendar(_BaseCalendar):
                 endDT=end,
 
             )
+
+    def GetAttachments(self, item):
+        ret = []
+        for d in item.Get('attachments'):
+            ret.append(
+                _Attachment(
+                    AttachmentId=d['fileId'],
+                    name=d['title'],
+                    parentExchange=self,
+                    **d,
+                )
+            )
+        return ret
+
+
+class _Attachment:
+    def __init__(self, AttachmentId, name, parentExchange, **kwargs):
+        print('_Attachment(', AttachmentId, parentExchange)
+        self.Filename = name
+        self.ID = AttachmentId
+        self._parentExchange = parentExchange
+        self._content = None
+        self._kwargs = kwargs
+
+    def Read(self):
+        if self._content is None:
+            # resp = self._parentExchange.session.get(self._kwargs['fileUrl'])
+            resp = self._parentExchange.session.get('https://www.googleapis.com/drive/v3/files/{}'.format(self._kwargs['fileId']))
+            print('resp=', resp)
+            self._content = resp.content.encode()
+
+        return self._content
+
+    @property
+    def Size(self):
+        # return size of content in Bytes
+        # In theory you could request the size of the attachment from EWS API, or even the hash or changekey
+        # but according to this microsoft forum, it is not possible (or at least it does not work as intended)
+        # https://social.technet.microsoft.com/Forums/office/en-US/143ab86c-903a-49da-9603-03e65cbd8180/ews-how-to-get-attachment-mime-info-not-content
+        return len(self.Read())
+
+    @property
+    def Name(self):
+        if self.Filename is None:
+            self._Update(getContent=False)
+        return self.Filename
+
+    def __str__(self):
+        return '<Attachment: Name={}>'.format(self.Name)
 
 
 def fromisoformat(date_string, returnOffsetAware=False):
@@ -375,15 +427,19 @@ if __name__ == '__main__':
     from gs_oauth_tools import AuthManager
     import time
     import webbrowser
+    from extronlib import File
 
     MY_ID = '3888'
 
-    authManager = AuthManager(googleJSONpath='google_test_creds.json')
+    authManager = AuthManager(googleJSONpath='google_test_creds.json')#, debug=True)
     user = authManager.GetUserByID(MY_ID)
 
     if not user:
         d = authManager.CreateNewUser(MY_ID, 'Google')
-        webbrowser.open(d.get('verification_uri'))
+        try:
+            webbrowser.open(d.get('verification_uri'))
+        except:
+            pass
         print('d=', d)
 
         while not user:
@@ -393,10 +449,10 @@ if __name__ == '__main__':
         print('user=', user)
 
     google = GoogleCalendar(
-        calendarName='Room Agent Test',
+        calendarName='Digital Signage 1',
         getAccessTokenCallback=user.GetAcessToken,
         debug=True,
-        persistentStorage='test.json',
+        # persistentStorage='test.json',
     )
 
     google.NewCalendarItem = lambda _, event: print('NewCalendarItem', event)
@@ -417,18 +473,24 @@ if __name__ == '__main__':
     #     )
     #     time.sleep(10)
 
-    time.sleep(2)
+    # time.sleep(2)
     google.UpdateCalendar(
         # startDT=datetime.datetime.now().replace(hour=0, minute=0, microsecond=0),
         # endDT=datetime.datetime.now() + datetime.timedelta(days=1),
     )
 
-    # nowEvents = google.GetNowCalItems()
-    # print('nowEvents=', nowEvents)
+    nowEvents = google.GetNowCalItems()
+    print('nowEvents=', nowEvents)
     # print('all Events=', google.GetAllEvents())
-    # for event in nowEvents:
-    #     google.ChangeEventTime(
-    #         event,
-    #         newStartDT=event.Get('Start') - datetime.timedelta(minutes=15),
-    #         newEndDT=event.Get('End') + datetime.timedelta(minutes=15),
-    #     )
+    for event in nowEvents:
+        print('event=', event)
+        # google.ChangeEventTime(
+        #     event,
+        #     newStartDT=event.Get('Start') - datetime.timedelta(minutes=15),
+        #     newEndDT=event.Get('End') + datetime.timedelta(minutes=15),
+        # )
+
+        for attachment in event.Attachments:
+            print('attachment=', attachment)
+            with File(attachment.Name, mode='wb') as file:
+                file.write(attachment.Read())
