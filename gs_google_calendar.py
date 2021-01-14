@@ -22,7 +22,7 @@ class GoogleCalendar(_BaseCalendar):
             # debug=debug,
             **k)
 
-        self._getCalendarID()  # init the self.calendars attribute
+        self._GetCalendarID()  # init the self.calendars attribute
         self.session = gs_requests.session()
 
     def print(self, *a, **k):
@@ -31,8 +31,8 @@ class GoogleCalendar(_BaseCalendar):
 
     def _DoRequest(self, *a, **k):
         self.print('_DoRequest(', a, k)
-        if self._getCalendarID() is None:
-            raise PermissionError('Error resolving calendar ID')
+        if self._GetCalendarID() is None:
+            raise PermissionError('Error resolving calendar ID "{}"'.format(self._calendarName))
 
         self.session.headers['Authorization'] = 'Bearer {}'.format(self._getAccessTokenCallback())
         self.session.headers['Accept'] = 'application/json'
@@ -44,11 +44,18 @@ class GoogleCalendar(_BaseCalendar):
 
         return self.session.request(*a, **k)
 
-    def _getCalendarID(self):
+    def _GetCalendarID(self, nextPageToken=None):
+        self.print('_GetCalendarID(nextPageToken=', nextPageToken)
+
         if self._calendarID is None:
             url = self._baseURL + 'users/me/calendarList'.format(
                 self._getAccessTokenCallback(),
             )
+            if nextPageToken:
+                # This will request the next page of results.
+                # This happens when the account has access to many-many calendars
+                url += '?pageToken={}'.format(nextPageToken)
+
             self.print('29 url=', url)
             resp = gs_requests.get(
                 url,
@@ -57,7 +64,7 @@ class GoogleCalendar(_BaseCalendar):
                 }
             )
             self._NewConnectionStatus('Connected' if resp.ok else 'Disconnected')
-            self.print('_getCalendarID resp=', json.dumps(resp.json(), indent=2))
+            self.print('_GetCalendarID resp=', json.dumps(resp.json(), indent=2))
             for calendar in resp.json().get('items', []):
                 calendarName = calendar.get('summary', None)
 
@@ -65,8 +72,14 @@ class GoogleCalendar(_BaseCalendar):
 
                 if calendarName == self._calendarName:
                     self._calendarID = calendar.get('id')
-                    self.print('New calendar ID found "{}"'.format(self._calendarID))
+                    self.print('calendar ID found "{}"'.format(self._calendarID))
                     break
+
+            npToken = resp.json().get('nextPageToken', None)
+            self.print('npToken=', npToken)
+            while self._calendarID is None and npToken is not None:
+                self.print('len(items)=', len(resp.json().get('items')))
+                return self._GetCalendarID(nextPageToken=npToken)
 
         return self._calendarID
 
@@ -90,7 +103,7 @@ class GoogleCalendar(_BaseCalendar):
         self.print('endStr=', endStr)
 
         url = self._baseURL + 'calendars/{}/events?timeMax={}&timeMin={}&singleEvents=True'.format(
-            self._getCalendarID(),
+            self._GetCalendarID(),
             endStr,
             startStr
         )
@@ -120,7 +133,7 @@ class GoogleCalendar(_BaseCalendar):
                     'Subject': item.get('summary'),
                     'OrganizerName': item['creator']['email'],
                     'HasAttachments': hasAttachments,
-                    'attachments': item.get('attachments', [])
+                    'attachments': item.get('attachments', []),
                 },
                 parentCalendar=self,
             )
@@ -172,6 +185,7 @@ class GoogleCalendar(_BaseCalendar):
             event = _CalendarItem(
                 startDT=datetime.datetime.fromtimestamp(start.timestamp()),
                 endDT=datetime.datetime.fromtimestamp(end.timestamp()),
+
                 data={
                     'ItemId': item.get('id'),
                     'Subject': item.get('summary'),
@@ -193,7 +207,7 @@ class GoogleCalendar(_BaseCalendar):
         # url = 'http://192.168.68.105'
         url = 'https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events/{eventId}'.format(
             calendarId=self._calendarID,
-            eventId=calItem.Get('ItemId')
+            eventId=calItem.Get('id')
         )
 
         data = {
@@ -271,7 +285,8 @@ class _Attachment:
     def Read(self):
         if self._content is None:
             # resp = self._parentExchange.session.get(self._kwargs['fileUrl'])
-            resp = self._parentExchange.session.get('https://www.googleapis.com/drive/v3/files/{}'.format(self._kwargs['fileId']))
+            resp = self._parentExchange.session.get(
+                'https://www.googleapis.com/drive/v3/files/{}'.format(self._kwargs['fileId']))
             print('resp=', resp)
             self._content = resp.content.encode()
 
@@ -431,7 +446,7 @@ if __name__ == '__main__':
 
     MY_ID = '3888'
 
-    authManager = AuthManager(googleJSONpath='google_test_creds.json')#, debug=True)
+    authManager = AuthManager(googleJSONpath='google.json')  # , debug=True)
     user = authManager.GetUserByID(MY_ID)
 
     if not user:
@@ -449,10 +464,10 @@ if __name__ == '__main__':
         print('user=', user)
 
     google = GoogleCalendar(
-        calendarName='Digital Signage 1',
+        calendarName='Room Agent Test 32',
         getAccessTokenCallback=user.GetAcessToken,
         debug=True,
-        # persistentStorage='test.json',
+        persistentStorage='storage.json',
     )
 
     google.NewCalendarItem = lambda _, event: print('NewCalendarItem', event)
