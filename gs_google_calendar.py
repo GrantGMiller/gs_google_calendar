@@ -42,7 +42,9 @@ class GoogleCalendar(_BaseCalendar):
 
             self.print('header', key, '=', val)
 
-        return self.session.request(*a, **k)
+        resp = self.session.request(*a, **k)
+        self._NewConnectionStatus('Connected' if resp.ok else 'Disconnected')
+        return resp
 
     def _GetCalendarID(self, nextPageToken=None):
         self.print('_GetCalendarID(nextPageToken=', nextPageToken)
@@ -112,7 +114,6 @@ class GoogleCalendar(_BaseCalendar):
             url=url
         )
         self.print('resp=', resp.text)
-        self._NewConnectionStatus('Connected' if resp.ok else 'Disconnected')
 
         theseCalendarItems = []
         for item in resp.json().get('items', []):
@@ -207,7 +208,7 @@ class GoogleCalendar(_BaseCalendar):
         # url = 'http://192.168.68.105'
         url = 'https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events/{eventId}'.format(
             calendarId=self._calendarID,
-            eventId=calItem.Get('id')
+            eventId=calItem.Get('ItemId')
         )
 
         data = {
