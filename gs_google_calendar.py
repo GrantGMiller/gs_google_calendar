@@ -3,6 +3,9 @@ import datetime
 from gs_calendar_base import _BaseCalendar, _CalendarItem
 import gs_requests
 import time
+import gs_oauth_tools
+
+from gs_service_accounts_base import _ServiceAccountBase
 
 
 class GoogleCalendar(_BaseCalendar):
@@ -439,6 +442,49 @@ def _parse_isoformat_date(dtstr):
     return [year, month, day]
 
 
+class ServiceAccount(_ServiceAccountBase):
+    def __init__(self, googleJSONpath, oauthID):
+        self.googleJSONpath = googleJSONpath
+        self.oauthID = oauthID
+
+    def GetStatus(self):
+        try:
+            authManager = gs_oauth_tools.AuthManager(
+                googleJSONpath=self.googleJSONpath,
+            )
+            user = authManager.GetUserByID(self.oauthID)
+            if user:
+                token = user.GetAccessToken()
+                if token:
+                    return 'Authorized'
+                else:
+                    return 'Unable to get token'
+            else:
+                return 'User not found'
+        except Exception as e:
+            return 'Error 464: {}'.format(e)
+
+    def GetType(self):
+        return 'Google'
+
+    def GetRoomInterface(self, roomName, **kwargs):
+        authManager = gs_oauth_tools.AuthManager(
+            googleJSONpath=self.googleJSONpath,
+        )
+        user = authManager.GetUserByID(self.oauthID)
+        google = GoogleCalendar(
+            getAccessTokenCallback=user.GetAccessToken,
+            calendarName=roomName,
+            **kwargs,
+        )
+        return google
+
+    @property
+    def calendars(self):
+        intf = self.GetRoomInterface(None)
+        return intf.calendars
+
+
 if __name__ == '__main__':
     from gs_oauth_tools import AuthManager
     import time
@@ -466,7 +512,7 @@ if __name__ == '__main__':
 
     google = GoogleCalendar(
         calendarName='Room Agent Test 32',
-        getAccessTokenCallback=user.GetAcessToken,
+        getAccessTokenCallback=user.GetAccessToken,
         debug=True,
         persistentStorage='storage.json',
     )
