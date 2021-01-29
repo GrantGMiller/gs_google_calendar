@@ -1,11 +1,12 @@
 import json
 import datetime
+
+from extronlib.system import ProgramLog
 from gs_calendar_base import _BaseCalendar, _CalendarItem
 import gs_requests
-import time
 import gs_oauth_tools
-
-from gs_service_accounts_base import _ServiceAccountBase
+from gs_service_accounts import _ServiceAccountBase
+import time
 
 
 class GoogleCalendar(_BaseCalendar):
@@ -22,11 +23,17 @@ class GoogleCalendar(_BaseCalendar):
 
         super().__init__(
             *a,
-            # debug=debug,
+            # debug=debug, #nope
             **k)
 
         self._GetCalendarID()  # init the self.calendars attribute
         self.session = gs_requests.session()
+
+    def __str__(self):
+        return '<GoogleCalendar: RoomName={}, LastUpdated={}>'.format(
+            self._calendarName,
+            self.LastUpdated,
+        )
 
     def print(self, *a, **k):
         if self._debug:
@@ -46,7 +53,6 @@ class GoogleCalendar(_BaseCalendar):
             self.print('header', key, '=', val)
 
         resp = self.session.request(*a, **k)
-        self._NewConnectionStatus('Connected' if resp.ok else 'Disconnected')
         return resp
 
     def _GetCalendarID(self, nextPageToken=None):
@@ -68,7 +74,6 @@ class GoogleCalendar(_BaseCalendar):
                     'Authorization': 'Bearer {}'.format(self._getAccessTokenCallback())
                 }
             )
-            self._NewConnectionStatus('Connected' if resp.ok else 'Disconnected')
             self.print('_GetCalendarID resp=', json.dumps(resp.json(), indent=2))
             for calendar in resp.json().get('items', []):
                 calendarName = calendar.get('summary', None)
@@ -116,6 +121,7 @@ class GoogleCalendar(_BaseCalendar):
             method='get',
             url=url
         )
+        self._NewConnectionStatus('Connected' if resp.ok else 'Disconnected')
         self.print('resp=', resp.text)
 
         theseCalendarItems = []
@@ -443,16 +449,16 @@ def _parse_isoformat_date(dtstr):
 
 
 class ServiceAccount(_ServiceAccountBase):
-    def __init__(self, googleJSONpath, oauthID):
+    def __init__(self, googleJSONpath, oauthID, authManager=None):
         self.googleJSONpath = googleJSONpath
         self.oauthID = oauthID
+        self.authManager = gs_oauth_tools.AuthManager(
+            googleJSONpath=self.googleJSONpath
+        )
 
     def GetStatus(self):
         try:
-            authManager = gs_oauth_tools.AuthManager(
-                googleJSONpath=self.googleJSONpath,
-            )
-            user = authManager.GetUserByID(self.oauthID)
+            user = self.authManager.GetUserByID(self.oauthID)
             if user:
                 token = user.GetAccessToken()
                 if token:
@@ -468,10 +474,18 @@ class ServiceAccount(_ServiceAccountBase):
         return 'Google'
 
     def GetRoomInterface(self, roomName, **kwargs):
-        authManager = gs_oauth_tools.AuthManager(
-            googleJSONpath=self.googleJSONpath,
-        )
-        user = authManager.GetUserByID(self.oauthID)
+
+        user = self.authManager.GetUserByID(self.oauthID)
+        if user is None:
+            # ProgramLog(
+            #     'Google ServiceAccount roomName="{}" kwargs="{}". '
+            #     'No User with ID="{}"'.format(
+            #         roomName,
+            #         kwargs,
+            #         self.oauthID
+            #     ))
+            return
+
         google = GoogleCalendar(
             getAccessTokenCallback=user.GetAccessToken,
             calendarName=roomName,
@@ -487,7 +501,6 @@ class ServiceAccount(_ServiceAccountBase):
 
 if __name__ == '__main__':
     from gs_oauth_tools import AuthManager
-    import time
     import webbrowser
     from extronlib import File
 
