@@ -563,7 +563,7 @@ if __name__ == '__main__':
         print('user=', user)
 
     google = GoogleCalendar(
-        calendarName='Room Agent Test 32',
+        calendarName='Room Agent Test 34',
         getAccessTokenCallback=user.GetAccessToken,
         debug=True,
         persistentStorage='storage.json',
