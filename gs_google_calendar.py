@@ -10,12 +10,19 @@ import time
 
 
 class GoogleCalendar(_BaseCalendar):
-    def __init__(self, *a, getAccessTokenCallback=None, calendarName=None, debug=False, **k):
+    def __init__(
+            self,
+            *a,
+            getAccessTokenCallback=None,
+            calendarName=None,
+            debug=False,
+            **k
+    ):
         if not callable(getAccessTokenCallback):
             raise TypeError('getAccessTokenCallback must be callable')
 
         self._getAccessTokenCallback = getAccessTokenCallback
-        self._calendarName = calendarName
+        self.calendarName = calendarName
         self._calendarID = None
         self.calendars = set()  # set to avoid duplicates
         self._baseURL = 'https://www.googleapis.com/calendar/v3/'
@@ -31,7 +38,7 @@ class GoogleCalendar(_BaseCalendar):
 
     def __str__(self):
         return '<GoogleCalendar: RoomName={}, LastUpdated={}>'.format(
-            self._calendarName,
+            self.calendarName,
             self.LastUpdated,
         )
 
@@ -42,7 +49,7 @@ class GoogleCalendar(_BaseCalendar):
     def _DoRequest(self, *a, **k):
         self.print('_DoRequest(', a, k)
         if self._GetCalendarID() is None:
-            raise PermissionError('Error resolving calendar ID "{}"'.format(self._calendarName))
+            raise PermissionError('Error resolving calendar ID "{}"'.format(self.calendarName))
 
         self.session.headers['Authorization'] = 'Bearer {}'.format(self._getAccessTokenCallback())
         self.session.headers['Accept'] = 'application/json'
@@ -80,7 +87,7 @@ class GoogleCalendar(_BaseCalendar):
 
                 self.calendars.add(calendarName)
 
-                if calendarName == self._calendarName:
+                if calendarName == self.calendarName:
                     self._calendarID = calendar.get('id')
                     self.print('calendar ID found "{}"'.format(self._calendarID))
                     break
@@ -449,12 +456,44 @@ def _parse_isoformat_date(dtstr):
 
 
 class ServiceAccount(_ServiceAccountBase):
-    def __init__(self, googleJSONpath, oauthID, authManager=None):
+    def __init__(self, googleJSONpath, oauthID, authManager):
         self.googleJSONpath = googleJSONpath
         self.oauthID = oauthID
-        self.authManager = gs_oauth_tools.AuthManager(
-            googleJSONpath=self.googleJSONpath
+        self.authManager = authManager
+
+    def __str__(self):
+        return '<Google ServiceAccount: googleJSONpath={}, oauthID={}, authManager={}>'.format(
+            self.googleJSONpath,
+            self.oauthID[:10] + '...',
+            self.authManager,
         )
+
+    @classmethod
+    def Dumper(cls, sa):
+        return json.dumps({
+            'googleJSONpath': sa.googleJSONpath,
+            'oauthID': sa.oauthID,
+            'authManager': 'devices.authManager',  # todo, generalize this
+        }, indent=2, sort_keys=True)
+
+    @classmethod
+    def Loader(cls, strng):
+        d = json.loads(strng)
+        authManager = d.pop('authManager', None)
+        if authManager == 'devices.authManager':
+            import devices
+            authManager = devices.authManager
+
+        print('487 authManager=', authManager)
+        print('488 d=', d)
+
+        ret = cls(
+            googleJSONpath=d['googleJSONpath'],
+            oauthID=d['oauthID'],
+            authManager=authManager
+        )
+        print('Google.ServiceAccount.Loader return', ret)
+        return ret
 
     def GetStatus(self):
         try:
